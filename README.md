@@ -33,11 +33,13 @@
 
 ### 点击按钮，一键部署到 CloudFlare Workers,
 
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/wangwangit/tts)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/leafsys1/tts-voice-magic)
 
 ## 🔐 API Key 鉴权（可选）
 
 Worker 支持通过环境变量 `API_KEY` 开启接口鉴权：
+
+> ⚠️ **与 STT 的硅基流动 Token 无关**：本仓库的语音转文字（STT）功能使用硅基流动 API，其 Token 只在网页上做语音转录时使用；这里的 `API_KEY` 是**保护 TTS 合成接口**（`/v1/audio/speech`）的鉴权密钥，两者互相独立，不要混淆。
 
 - **不配置 `API_KEY`**：保持原有行为，接口完全开放（网页可直接测试）。
 - **配置 `API_KEY`**：`/v1/audio/speech` 与 `/v1/audio/transcriptions` 必须携带 `Authorization: Bearer <API_KEY>` 或 `x-api-key: <API_KEY>` 请求头，否则返回 401；网页首页仍可正常打开，在页面顶部输入框填入 key 后测试请求会自动携带。
