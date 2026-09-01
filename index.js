@@ -82,6 +82,37 @@ const HTML_PAGE = `
             margin-bottom: 20px;
             font-weight: 500;
         }
+
+        .api-key-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .api-key-row input {
+            width: 320px;
+            max-width: 100%;
+            padding: 8px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            background: var(--surface-color);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .api-key-row input:focus {
+            border-color: var(--border-focus);
+        }
+
+        .api-key-hint {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
         
         .header .features {
             display: flex;
@@ -943,6 +974,10 @@ const HTML_PAGE = `
         <div class="header">
             <h1 data-i18n="header.title">VoiceCraft</h1>
             <p class="subtitle" data-i18n="header.subtitle">AI-Powered Voice Processing Platform</p>
+            <div class="api-key-row">
+                <input type="password" id="apiKeyInput" placeholder="API Key（可选，留空则不鉴权）" autocomplete="off" />
+                <span class="api-key-hint">保存在本浏览器 localStorage</span>
+            </div>
             <div class="features">
                 <div class="feature-item">
                     <span class="feature-icon">✨</span>
@@ -1265,6 +1300,14 @@ const HTML_PAGE = `
         let transcriptionToken = null;
         let currentLanguage = 'en'; // 默认语言
 
+        // API Key（可选）：从 localStorage 读取，请求时自动携带 Authorization: Bearer <key>
+        let apiKey = '';
+        try {
+            apiKey = (localStorage.getItem('ttsApiKey') || '').trim();
+        } catch (e) {
+            apiKey = '';
+        }
+
         // 国际化翻译数据
         const translations = {
             en: {
@@ -1536,7 +1579,27 @@ const HTML_PAGE = `
             initializeAudioUpload();
             initializeTokenConfig();
             initializeLanguageSwitcher();
+            initializeApiKey();
         });
+
+        // 初始化 API Key 输入框（可选）：回填已保存的 key，并监听变化保存到 localStorage
+        function initializeApiKey() {
+            const input = document.getElementById('apiKeyInput');
+            if (!input) {
+                return;
+            }
+            input.value = apiKey;
+            input.addEventListener('input', function() {
+                apiKey = input.value.trim();
+                try {
+                    if (apiKey) {
+                        localStorage.setItem('ttsApiKey', apiKey);
+                    } else {
+                        localStorage.removeItem('ttsApiKey');
+                    }
+                } catch (e) {}
+            });
+        }
 
         // 初始化输入方式切换
         function initializeInputMethodTabs() {
@@ -1708,6 +1771,7 @@ const HTML_PAGE = `
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
+                            ...(apiKey ? { 'Authorization': 'Bearer ' + apiKey } : {}),
                         },
                         body: JSON.stringify({
                             input: text,
@@ -1731,6 +1795,7 @@ const HTML_PAGE = `
                     
                     response = await fetch('/v1/audio/speech', {
                         method: 'POST',
+                        headers: apiKey ? { 'Authorization': 'Bearer ' + apiKey } : {},
                         body: formData
                     });
                 }
@@ -2103,11 +2168,11 @@ const HTML_PAGE = `
 
 export default {
     async fetch(request, env, ctx) {
-        return handleRequest(request);
+        return handleRequest(request, env);
     }
 };
 
-async function handleRequest(request) {
+async function handleRequest(request, env) {
     if (request.method === "OPTIONS") {
         return handleOptions(request);
     }
@@ -2126,6 +2191,12 @@ async function handleRequest(request) {
                 ...makeCORSHeaders()
             }
         });
+    }
+
+    // API 请求鉴权（配置了 API_KEY 时生效）
+    const authError = checkAuth(request, env);
+    if (authError) {
+        return authError;
     }
 
     if (path === "/v1/audio/transcriptions") {
@@ -2206,6 +2277,43 @@ async function handleRequest(request) {
 
     // 默认返回 404
     return new Response("Not Found", { status: 404 });
+}
+
+// API Key 鉴权
+// 从环境变量读取密钥（Cloudflare 的 API_KEY Secret，或 wrangler.toml 的 [vars] API_KEY）
+// - 未配置 API_KEY：放行所有请求（保持原有公开行为，向后兼容）
+// - 已配置 API_KEY：API 请求必须携带 Authorization: Bearer <key> 或 x-api-key: <key>，
+//   否则返回 401。网页首页不受影响（可正常打开，输入 key 后前端请求自动携带）。
+function checkAuth(request, env) {
+    const expectedKey = String((env && (env.API_KEY || env.TTS_API_KEY)) || "").trim();
+    if (!expectedKey) {
+        return null;
+    }
+    const authHeader = request.headers.get("Authorization") || "";
+    const apiKeyHeader = request.headers.get("x-api-key") || "";
+    let providedKey = "";
+    if (authHeader.startsWith("Bearer ")) {
+        providedKey = authHeader.slice(7).trim();
+    } else if (apiKeyHeader) {
+        providedKey = apiKeyHeader.trim();
+    }
+    if (providedKey && providedKey === expectedKey) {
+        return null;
+    }
+    return new Response(JSON.stringify({
+        error: {
+            message: "Invalid or missing API key. Provide 'Authorization: Bearer <API_KEY>' or 'x-api-key: <API_KEY>'.",
+            type: "invalid_request_error",
+            param: null,
+            code: "invalid_api_key"
+        }
+    }), {
+        status: 401,
+        headers: {
+            "Content-Type": "application/json",
+            ...makeCORSHeaders()
+        }
+    });
 }
 
 async function handleOptions(request) {

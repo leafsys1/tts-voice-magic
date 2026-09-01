@@ -35,6 +35,50 @@
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/wangwangit/tts)
 
+## 🔐 API Key 鉴权（可选）
+
+Worker 支持通过环境变量 `API_KEY` 开启接口鉴权：
+
+- **不配置 `API_KEY`**：保持原有行为，接口完全开放（网页可直接测试）。
+- **配置 `API_KEY`**：`/v1/audio/speech` 与 `/v1/audio/transcriptions` 必须携带 `Authorization: Bearer <API_KEY>` 或 `x-api-key: <API_KEY>` 请求头，否则返回 401；网页首页仍可正常打开，在页面顶部输入框填入 key 后测试请求会自动携带。
+
+### 生产环境推荐配置方式（Dashboard）
+
+1. Cloudflare Dashboard → 你的 Worker → **Settings → Variables and Secrets**
+2. 点击 **Add** → 选择 **Secret** 类型
+3. 名称填 `API_KEY`，值填你的密钥（例如随机生成的 `sk-xxxx`）
+4. 保存后重新部署生效
+
+### 本地/CI 配置方式（wrangler）
+
+```bash
+# 方式一：使用环境变量（不写入仓库）
+echo 'API_KEY=sk-xxxx' >> .dev.vars
+npx wrangler deploy
+
+# 方式二：直接写进 wrangler.toml（不推荐，会暴露在仓库）
+# [vars]
+# API_KEY = "sk-xxxx"
+```
+
+### Hermes Studio / OpenAI 兼容客户端接入
+
+```
+POST https://你的-worker域名/v1/audio/speech
+Authorization: Bearer sk-xxxx
+Content-Type: application/json
+
+{
+  "input": "你好，这是一个测试",
+  "voice": "zh-CN-XiaoxiaoNeural",
+  "speed": 1.0,
+  "pitch": "0",
+  "style": "general"
+}
+```
+
+在 Hermes Studio 等 OpenAI 兼容客户端中配置时：**Base URL 填 `https://你的-worker域名/v1`，API Key 填上面设置的 `API_KEY`**，模型名可随意填，音色通过 `voice` 参数指定（如 `zh-CN-XiaoxiaoNeural`、`zh-CN-YunxiNeural`，完整列表见下文）。
+
 
 
 ## 🎯 使用方法
