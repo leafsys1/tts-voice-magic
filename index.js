@@ -2199,6 +2199,26 @@ async function handleRequest(request, env) {
         return authError;
     }
 
+    // OpenAI 兼容的模型列表端点（Hermes Studio / 其他客户端"连接并获取模型"用）
+    if (path === "/v1/models" || path === "/models") {
+        return new Response(JSON.stringify({
+            object: "list",
+            data: [
+                {
+                    id: "edge-tts",
+                    object: "model",
+                    created: 1700000000,
+                    owned_by: "edge-tts"
+                }
+            ]
+        }), {
+            headers: {
+                "Content-Type": "application/json",
+                ...makeCORSHeaders()
+            }
+        });
+    }
+
     if (path === "/v1/audio/transcriptions") {
         try {
             return await handleAudioTranscription(request);
